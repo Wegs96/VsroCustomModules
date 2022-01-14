@@ -1,5 +1,16 @@
 # VsroCustomModules
->>>>
+
+this is an old project i was working on 3 years ago , i was planning to replece current vsro modules with custom ones to have more control and throw out filters idea yet i didn't have time for this shit so i just made like 90% of only GatewayServer !
+anyway, the full source is between ur hands now , u can fk with it as much as u want just DON'T BE A DICK
+
+some stuff to keep in mind !
+The base of the project is made on Certification.Replace (goes to DaxterSoul)
+Some Packet structure used in this project taken from Silkroad Docs (goes to DaxterSoul)
+This project is targeting .net framework 4.5
+Coding style of this project might be a peace of shit , u can always upgrade it
+as far as i remember only update part was missing
+Last but latest i'm always up for any question but if u can't build/run this project on your own don't ask me how to.
+
 # LICENSE
 > DON'T BE A DICK PUBLIC LICENSE
 > TERMS AND CONDITIONS FOR COPYING, DISTRIBUTION AND MODIFICATION
