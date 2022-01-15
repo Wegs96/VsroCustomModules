@@ -1,7 +1,7 @@
-﻿using Replace.Common.Security;
+﻿using GatewayServer.Module.Config;
+using Replace.Common.Security;
 
-
-namespace GatewayServer
+namespace GatewayServer.Module
 {
    internal class ModuleData
     {

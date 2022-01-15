@@ -52,6 +52,7 @@
     <Compile Include="Client\ClientInterface.cs" />
     <Compile Include="Module\ModuleData.cs" />
     <Compile Include="Module\ModuleInterface.cs" />
+    <Compile Include="Module\_ModuleVersion.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>

@@ -1,0 +1,10 @@
+C:\Users\karim\Source\Repos\VsroCustomModules\Replace.Common\bin\Debug\NLog.config
+C:\Users\karim\Source\Repos\VsroCustomModules\Replace.Common\bin\Debug\Replace.Common.dll
+C:\Users\karim\Source\Repos\VsroCustomModules\Replace.Common\bin\Debug\Replace.Common.pdb
+C:\Users\karim\Source\Repos\VsroCustomModules\Replace.Common\bin\Debug\NLog.dll
+C:\Users\karim\Source\Repos\VsroCustomModules\Replace.Common\bin\Debug\NLog.xml
+C:\Users\karim\Source\Repos\VsroCustomModules\Replace.Common\obj\Debug\Replace.Common.csprojAssemblyReference.cache
+C:\Users\karim\Source\Repos\VsroCustomModules\Replace.Common\obj\Debug\Replace.Common.csproj.CoreCompileInputs.cache
+C:\Users\karim\Source\Repos\VsroCustomModules\Replace.Common\obj\Debug\Replace.Common.csproj.CopyComplete
+C:\Users\karim\Source\Repos\VsroCustomModules\Replace.Common\obj\Debug\Replace.Common.dll
+C:\Users\karim\Source\Repos\VsroCustomModules\Replace.Common\obj\Debug\Replace.Common.pdb

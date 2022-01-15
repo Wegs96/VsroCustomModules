@@ -1,17 +1,17 @@
-﻿using NLog;
+﻿using System.Collections.Generic;
+using System.Data.SqlClient;
+using System.Linq;
+using NLog;
 using Replace.Common;
 using Replace.Common.Certification;
 using Replace.Common.Database;
 using Replace.Common.Security;
-using System.Collections.Generic;
-using System.Data.SqlClient;
-using System.Linq;
 
-namespace GatewayServer
+namespace GatewayServer.Module.Config
 {
     public class CertificationManager
     {
-        private static Logger Logger = LogManager.GetLogger(nameof(CertificationManager));
+        private static Logger _logger = LogManager.GetLogger(nameof(CertificationManager));
 
         #region Fields
 
@@ -27,8 +27,8 @@ namespace GatewayServer
         private List<ServerMachine> _serverMachineList;
         private List<ServerBody> _serverBodyList;
         private List<ServerCord> _serverCordList;
-        private List<Module> _moduleList;
-
+        private List<Replace.Common.Certification.Module> _moduleList;
+        public List<ModuleVersion> ModuleVersions = new List<ModuleVersion>();
         private List<Notice> _noticeList;
 
 
@@ -39,7 +39,7 @@ namespace GatewayServer
         public CertificationConfig Config => _config;
         public SqlDatabase Database => _database;
 
-        public IReadOnlyList<Module> ModuleList => _moduleList;
+        public IReadOnlyList<Replace.Common.Certification.Module> ModuleList => _moduleList;
         public IReadOnlyList<Content> ContentList => _contentList;
         public IReadOnlyList<Division> DivisionList => _divisionList;
         public IReadOnlyList<Farm> FarmList => _farmList;
@@ -53,7 +53,7 @@ namespace GatewayServer
         public int Version = 0;
         public int LatestClientVersion = 150;
 
-        public Module CertificationModule { get; set; }
+        public Replace.Common.Certification.Module CertificationModule { get; set; }
         public ServerMachine CertificationMachine { get; set; }
         public ServerBody CertificationBody { get; set; }
         public Division CertificationDivision { get; set; }
@@ -69,7 +69,7 @@ namespace GatewayServer
             _config = config;
             _database = new SqlDatabase();
 
-            _moduleList = new List<Module>();
+            _moduleList = new List<Replace.Common.Certification.Module>();
             _contentList = new List<Content>();
             _divisionList = new List<Division>();
             _farmList = new List<Farm>();
@@ -175,16 +175,16 @@ namespace GatewayServer
         private void ValidateList<T>(List<T> list, string name)
         {
             if (list.Count == 0)
-                Logger.Fatal($"{Caller.GetMemberName()}: {name} is empty.");
+                _logger.Fatal($"{Caller.GetMemberName()}: {name} is empty.");
         }
 
         #endregion Load Methods
 
         #region UpdateMethods
 
-        public bool UpdateShardName(short shardID, string shardName)
+        public bool UpdateShardName(short shardId, string shardName)
         {
-            var shard = _shardList.Find(p => p.ID == shardID);
+            var shard = _shardList.Find(p => p.ID == shardId);
             if (shard == null)
                 return false;
 
@@ -194,7 +194,7 @@ namespace GatewayServer
             var sqlParams = new[]
             {
                 new SqlParameter("@name", shardName),
-                new SqlParameter("@id", shardID)
+                new SqlParameter("@id", shardId)
             };
             var result = _database.Execute($"UPDATE Shard SET Name = {sqlParams[0].ParameterName} WHERE ID = {sqlParams[1].ParameterName}", sqlParams);
             if (result)
@@ -203,9 +203,9 @@ namespace GatewayServer
             return result;
         }
 
-        public bool UpdateShardMaxUser(short shardID, short maxUser)
+        public bool UpdateShardMaxUser(short shardId, short maxUser)
         {
-            var shard = _shardList.Find(p => p.ID == shardID);
+            var shard = _shardList.Find(p => p.ID == shardId);
             if (shard == null)
                 return false;
 
@@ -215,7 +215,7 @@ namespace GatewayServer
             var sqlParams = new[]
             {
                 new SqlParameter("@maxUser", maxUser),
-                new SqlParameter("@id", shardID)
+                new SqlParameter("@id", shardId)
             };
             var result = _database.Execute($"UPDATE Shard SET MaxUser = {sqlParams[0].ParameterName} WHERE ID = {sqlParams[1].ParameterName}", sqlParams);
             if (result)
@@ -254,7 +254,7 @@ namespace GatewayServer
         public void ReadAcknowledge(Packet packet)
         {
             //packet.WriteByte(1); //result
-            _moduleList = this.ReadList(packet, _moduleList) as List<Module>;
+            _moduleList = this.ReadList(packet, _moduleList) as List<Replace.Common.Certification.Module>;
             _contentList = this.ReadList(packet, _contentList) as List<Content>;
             _divisionList = this.ReadList(packet, _divisionList) as List<Division>;
             _farmList = this.ReadList(packet, _farmList) as List<Farm>;

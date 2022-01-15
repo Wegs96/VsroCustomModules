@@ -16,6 +16,8 @@ namespace Replace.Common.AsyncNetwork
         {
             lock (states)
             {
+                if(states.Count <= 0)
+                    return;
                 foreach (AsyncState state in states)
                 {
                     try

@@ -1,28 +1,35 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Data.SqlClient;
+using System.Linq;
+using System.Net;
 using System.Threading;
+using System.Threading.Tasks;
+using GatewayServer.Client;
+using GatewayServer.Module.Config;
 using NLog;
 using Replace.Common;
 using Replace.Common.AsyncNetwork;
 using Replace.Common.Certification;
+using Replace.Common.Gateway;
 using Replace.Common.Security;
 
-namespace GatewayServer
+namespace GatewayServer.Module
 {
     internal class ModuleInterface : IAsyncInterface
     {
-        private static Logger logger = LogManager.GetLogger("GatewayServer"/*nameof(ModuleInterface)*/);
-
+        private static Logger _logger = LogManager.GetLogger("GatewayServer"/*nameof(ModuleInterface)*/);
+        public static ModuleData ModuleData;
+        public static List<ClientData> UserTokenList = new List<ClientData>();
         public bool OnConnect(AsyncContext context)
         {
          //   logger.Debug(nameof(this.OnConnect));
 
-            ModuleData moduleData = new ModuleData();
-            moduleData.CertificationManager = context.User as CertificationManager;
-            moduleData.Connected = true;
+            /*ModuleData*/ ModuleData = new ModuleData();
+            ModuleData.CertificationManager = context.User as CertificationManager;
+            ModuleData.Connected = true;
 
-            context.User = moduleData;
+            context.User = ModuleData;
 
            
             return true;
@@ -33,29 +40,30 @@ namespace GatewayServer
 
         public void OnDisconnect(AsyncContext context)
         {
-            logger.Debug(nameof(this.OnDisconnect));
+            _logger.Debug(nameof(this.OnDisconnect));
 
             throw new NotImplementedException();
         }
 
         public void OnError(AsyncContext context, object user)
         {
-            logger.Debug(nameof(this.OnError));
+            _logger.Debug(nameof(this.OnError));
 
             throw new NotImplementedException();
         }
 
         public bool OnReceive(AsyncContext context, byte[] buffer, int count)
         {
-           // logger.Debug(nameof(this.OnReceive));
+            // logger.Debug(nameof(this.OnReceive));
 
-            ModuleData moduleData = (ModuleData)context.User;
+            /*ModuleData*/
+            //moduleData = (ModuleData)context.User;
 
 
             try
             {
-                moduleData.SecurityManager.Recv(buffer, 0, count);
-                List<Packet> packets = moduleData.SecurityManager.TransferIncoming();
+                ModuleData.SecurityManager.Recv(buffer, 0, count);
+                List<Packet> packets = ModuleData.SecurityManager.TransferIncoming();
 
                 if(packets != null)
                 {
@@ -72,27 +80,29 @@ namespace GatewayServer
                                 continue;
 
                             case 0x2001:
-                                logger.Info("request server certification");
-                                OnModuleIdentification(packet, moduleData, context);
+                                _logger.Info("request server certification");
+                                OnModuleIdentification(packet, ModuleData, context);
                                 break;
 
                             case 0x2005:
-                                OnServerUpdate(packet, moduleData,context);
+                                OnServerUpdate(packet, ModuleData,context);
                                 break;
 
                             case 0x6005:
-                                OnServerUpdateRequest(packet, moduleData,context);
+                                OnServerUpdateRequest(packet, ModuleData,context);
                                 break;
 
                             case 0xA003:
-                                logger.Info("successfully server certificate"); /*successfully server certificated*/
-                                OnCertificationResponse(packet, moduleData, context);
+                                _logger.Info("successfully server certificate"); /*successfully server certificated*/
+                                OnCertificationResponse(packet, ModuleData, context);
                                 break;
 
                             case 0x6008:
-                                OnForwardRequest(packet, moduleData);
+                                OnForwardRequest(packet, ModuleData);
                                 break;
-
+                            case 0xA008:
+                                OnForwardRes(packet, ModuleData);
+                                break;
                             default:
                                 //Console.WriteLine();
                                 //byte[] payload = packet.GetBytes();
@@ -139,7 +149,7 @@ namespace GatewayServer
 
         }
 
-        private void OnServerUpdateRequest(Packet packet, ModuleData context_data,AsyncContext context)
+        private void OnServerUpdateRequest(Packet packet, ModuleData contextData,AsyncContext context)
         {
             var updateFlag = (ServerUpdateType)packet.ReadByte();
             if (updateFlag.HasFlags(ServerUpdateType.Body))
@@ -156,14 +166,14 @@ namespace GatewayServer
                     if (entryFlag == 2)
                         break;
 
-                    var bodyID = packet.ReadUShort();
+                    var bodyId = packet.ReadUShort();
 
-                    serverUpdate.WriteUShort(bodyID/*body.ID*/);
+                    serverUpdate.WriteUShort(bodyId/*body.ID*/);
                     serverUpdate.WriteUInt(ServerBodyState.Cert/*body.State*/);
 
                 }
 
-                context_data.SecurityManager.Send(serverUpdate);
+                contextData.SecurityManager.Send(serverUpdate);
             }
             if (updateFlag.HasFlags(ServerUpdateType.Cord))
             {
@@ -179,30 +189,121 @@ namespace GatewayServer
                     if (entryFlag == 2)
                         break;
 
-                    var cordID = packet.ReadUInt();
+                    var cordId = packet.ReadUInt();
 
-                    serverUpdate.WriteUInt(cordID/*cord.ID*/);
+                    serverUpdate.WriteUInt(cordId/*cord.ID*/);
                     serverUpdate.WriteUInt(ServerCordState.Blind/*cord.State*/);
 
                 }
 
-                context_data.SecurityManager.Send(serverUpdate);
+                contextData.SecurityManager.Send(serverUpdate);
             }
         }
-
-        private void OnForwardRequest(Packet packet, ModuleData context_data)
+        private void OnForwardRes(Packet packet, ModuleData moduleData)
         {
-            var forwardingID = packet.ReadUInt();
+            var result = packet.ReadByte();
+            if (result == 1)
+            {
+                var forwardingId = packet.ReadUInt();
+                var forwardedOpcode = packet.ReadUShort();
+
+                var clientData = UserTokenList[(int)forwardingId];
+                var AgentBody = clientData.CertificationManager.ServerBodyList.SingleOrDefault(p => p.ModuleID == 6);
+
+                if (forwardedOpcode == 0xA203)
+                {
+
+                    packet.ReadByte();
+                    clientData.AgentToken = packet.ReadUInt(); // agent token
+
+                    var LoginAck = new Packet(0xA102, true);
+                    LoginAck.WriteByte(1);
+                    LoginAck.WriteUInt(clientData.AgentToken);
+
+                    LoginAck.WriteAscii(clientData.CertificationManager.CertificationMachine.PublicIP);
+                    LoginAck.WriteUShort(AgentBody.BindPort);
+
+                    clientData.SecurityManager.Send(LoginAck);
+                }
+
+                if (forwardedOpcode == 0xA200)
+
+                {
+                    packet.ReadUInt();
+                    var loginResult = packet.ReadByte();
+
+                    if (loginResult != 1)
+                    {
+                        if (loginResult == 2 && packet.ReadByte() == 1)
+                        {
+                            var LoginAck = new Packet(0xA102, true);
+                            LoginAck.WriteByte(2);
+                            LoginAck.WriteUInt(LoginErrorCode.AlreadyConnected);
+                            clientData.SecurityManager.Send(LoginAck);
+                        }
+                    }
+                    else
+                    {
+                        Packet ForwardPacket = new Packet(0x6008);
+                        ForwardPacket.WriteUInt(ModuleInterface.UserTokenList.IndexOf(clientData)); // forword.id
+                        ForwardPacket.WriteUShort(AgentBody.ID); // agent.bodyid
+                        ForwardPacket.WriteUShort(0x6203); //inneropcode
+
+
+                        ForwardPacket.WriteByteArray(IPAddress.Parse(clientData.RemoteIpEndPoint.Address.ToString())
+                            .GetAddressBytes()); //user.ip
+
+                        ForwardPacket.WriteAscii(clientData.Username); //username
+                        ForwardPacket.WriteAscii(clientData.Password); //password
+                        ForwardPacket.WriteUInt(clientData.Jid); // userjid
+                        ForwardPacket.WriteByte(clientData.SecPrimary); //sec_primary
+                        ForwardPacket.WriteByte(clientData.SecContent); //sec_content
+                        ForwardPacket.WriteUShort(clientData.AccPlayTime); // AccPlayTime
+                        ForwardPacket.WriteUInt(clientData.LatestUpdateTimeToPlayTime); //LatestUpdateTime_ToPlayTime
+
+
+                        moduleData.SecurityManager.Send(ForwardPacket);
+                    }
+                }
+
+                if (forwardedOpcode == 0xA111)
+                {
+                    packet.ReadAscii(); // username
+                    packet.ReadUShort();
+                    uint maxFail = packet.ReadUInt();
+                    uint curFail = packet.ReadUInt();
+
+                    var LoginAck = new Packet(0xA102, true);
+
+                    LoginAck.WriteByte(2);
+                    LoginAck.WriteByte(LoginErrorCode.InvalidCredentials);
+                    LoginAck.WriteUInt(maxFail);
+                    LoginAck.WriteUInt(curFail);
+
+                    clientData.SecurityManager.Send(LoginAck);
+
+                    Task.Delay(1000);
+                    if(curFail >= maxFail)
+                        clientData.Context.State.Context.Disconnect();
+                }
+
+            }
+          
+        }
+
+        private void OnForwardRequest(Packet packet, ModuleData contextData)
+        {
+            var forwardingId = packet.ReadUInt();
             var forwardingDestination = packet.ReadUShort(); //ServerBodyID
             var forwardedOpcode = packet.ReadUShort();
 
             var forwardAck = new Packet(0xA008, packet.Encrypted, packet.Massive);
 
-            var result = forwardingDestination == context_data.CertificationManager.CertificationBody.ID;
+            var result = forwardingDestination == contextData.CertificationManager.CertificationBody.ID;
             if (result)
             {
                 forwardAck.WriteByte(1); //result
-                forwardAck.WriteUInt(forwardingID);
+                forwardAck.WriteUInt(forwardingId);
                 switch (forwardedOpcode)
                 {
                     case 0x6300: //ms ping
@@ -217,14 +318,14 @@ namespace GatewayServer
 
                         serverUpdate.WriteByte(0x00);
                         serverUpdate.WriteByte(0x01);
-                        serverUpdate.WriteUShort(context_data.CertificationManager.CertificationBody.ID);
+                        serverUpdate.WriteUShort(contextData.CertificationManager.CertificationBody.ID);
                         serverUpdate.WriteByte(ServerBodyState.Blue);
                         serverUpdate.WriteByte(0x00);
                         serverUpdate.WriteByte(0x00);
                         serverUpdate.WriteByte(0x00);
                         serverUpdate.WriteUInt(ServerCordState.Established);
 
-                        context_data.SecurityManager.Send(serverUpdate);
+                        contextData.SecurityManager.Send(serverUpdate);
 
 
                         forwardAck.WriteUShort(0xA303);
@@ -232,11 +333,11 @@ namespace GatewayServer
                         forwardAck.WriteByte(0x00);
                         forwardAck.WriteByte(0x01);
 
-                        context_data.CertificationManager.CertificationBody.State = ServerBodyState.Blue;
+                        contextData.CertificationManager.CertificationBody.State = ServerBodyState.Blue;
                         break;
 
                     default:
-                        logger.Warn($"Unknown forwardedOpcode [{forwardedOpcode.ToString("X4")}]: {packet}");
+                        _logger.Warn($"Unknown forwardedOpcode [{forwardedOpcode.ToString("X4")}]: {packet}");
                         break;
                 }
             }
@@ -245,10 +346,10 @@ namespace GatewayServer
                 //return;
                 //Lost the sample -.-
                 forwardAck.WriteByte(2); //result
-                forwardAck.WriteUInt(forwardingID);
+                forwardAck.WriteUInt(forwardingId);
                 forwardAck.WriteUShort(0); //errorCode?
             }
-            context_data.SecurityManager.Send(forwardAck);
+            contextData.SecurityManager.Send(forwardAck);
         }
 
         private void OnCertificationResponse(Packet packet, ModuleData moduleData, AsyncContext context)
@@ -261,19 +362,19 @@ namespace GatewayServer
             cert.ReadAcknowledge(packet);
 
 
-            logger.Fatal($"server cord established : {ServerUpdateType.Cord} ({context.State.EndPoint})");
+            _logger.Fatal($"server cord established : {ServerUpdateType.Cord} ({context.State.EndPoint})");
 
 
             #region connection
             string[] certCon =
                 moduleData.CertificationManager.CertificationDivision.DBConfig.Split(';');
 
-            string ConnectionString =
+            string connectionString =
                 $"Data Source={certCon[1].Substring(certCon[1].IndexOf('=') + 1)};Initial Catalog={certCon[5].Substring(certCon[5].IndexOf('=') + 1)};User ID={certCon[3].Substring(certCon[3].IndexOf('=') + 1)};Password={certCon[4].Substring(certCon[4].IndexOf('=') + 1)}";
 
             moduleData.CertificationManager.Database.Open(
                 moduleData.CertificationManager.Config.CertificationConnectionString =
-                    ConnectionString);
+                    connectionString);
 
             #endregion
 
@@ -293,23 +394,52 @@ namespace GatewayServer
             serverUpdate.WriteByte(2);
 
             moduleData.SecurityManager.Send(serverUpdate);
-        }
 
+
+            Program.AsyncServer = new AsyncServer();
+            Program.AsyncServer.Accept(moduleData.CertificationManager.CertificationMachine.PublicIP, moduleData.CertificationManager.CertificationBody.BindPort, 5, new ClientInterface(), moduleData.CertificationManager);
+            Program.Certificated = true;
+        }
 
         private void DatabaseLoadVersion(ModuleData moduleData)
         {
 
-
-            SqlDataReader reader;
-
-            if (moduleData.CertificationManager.Database.Execute(
-                "SELECT TOP 1 nVersion FROM _ModuleVersion WHERE nModuleID = 9 AND nValid = 1", out reader))
+            try
             {
-                reader.Read();
-                moduleData.CertificationManager.Version = Convert.ToInt32(reader[0].ToString());
-                reader.Close();
-                logger.Info($"Current Client Version : {moduleData.CertificationManager.Version}");
 
+                SqlDataReader reader;
+
+                #region Load ModuleVersion
+
+                if (moduleData.CertificationManager.Database.Execute(
+                    "select * from _ModuleVersion with (NOLOCK) where nValid = 1", out reader))
+                {
+                    while (reader.Read())
+                    {
+                        var moduleVersion = new ModuleVersion();
+
+                        moduleVersion.nID = uint.Parse(reader["nID"].ToString());
+                        moduleVersion.nDivisionID = byte.Parse(reader["nDivisionID"].ToString());
+                        moduleVersion.nContentID = byte.Parse(reader["nContentID"].ToString());
+                        moduleVersion.nModuleID = byte.Parse(reader["nModuleID"].ToString());
+                        moduleVersion.nVersion = uint.Parse(reader["nVersion"].ToString());
+                        moduleVersion.szVersion = reader["szVersion"].ToString();
+                        moduleVersion.szDesc = reader["szDesc"].ToString();
+                        moduleVersion.nValid = byte.Parse(reader["nValid"].ToString());
+                        
+
+                        moduleData.CertificationManager.ModuleVersions.Add(moduleVersion);
+                    }
+                    reader.Close();
+                    _logger.Info($"Current Client Version : {moduleData.CertificationManager.ModuleVersions.SingleOrDefault(p => p.nModuleID == 9).nVersion}");
+
+                    #endregion
+                }
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e);
+                throw;
             }
 
         }
@@ -321,10 +451,10 @@ namespace GatewayServer
             SqlDataReader reader;
 
 
-            if (moduleData.CertificationManager.Database.Execute("SELECT Subject, Article,EditDate FROM _Notice ORDER BY ID DESC", out reader))
+            if (moduleData.CertificationManager.Database.Execute("SELECT top 4 Subject, Article,EditDate FROM _Notice ORDER BY ID DESC", out reader))
                 moduleData.CertificationManager.Load(reader, moduleData.CertificationManager.NoticeList);
 
-            logger.Info($"article loaded : {moduleData.CertificationManager.NoticeList.Count}");
+            _logger.Info($"article loaded : {moduleData.CertificationManager.NoticeList.Count}");
         }
 
         private void OnServerUpdate(Packet packet, ModuleData moduleData , AsyncContext context)
@@ -341,7 +471,7 @@ namespace GatewayServer
                     if (entryFlag == 2)
                         break;
 
-                    var serverBodyID = packet.ReadUShort();
+                    var serverBodyId = packet.ReadUShort();
                     var serverBodyState = (ServerBodyState)packet.ReadUInt();
 
                   //  logger.Info($"Add ServerNotify : ({moduleData.CertificationManager.CertificationBody.MachineID.}) - GlobalManager");
@@ -360,7 +490,7 @@ namespace GatewayServer
                     if (entryFlag == 2)
                         break;
 
-                    var serverCordID = packet.ReadUInt();
+                    var serverCordId = packet.ReadUInt();
                     var serverCordState = (ServerCordState)packet.ReadUInt();
 
                 }
@@ -373,14 +503,14 @@ namespace GatewayServer
         {
           //  logger.Debug(nameof(this.OnTick));
 
-            ModuleData moduleData = (ModuleData)context.User;
-            if (moduleData == null)
+            //ModuleData moduleData = (ModuleData)context.User;
+            if (ModuleData == null)
                 return;
 
-            if (!moduleData.Connected)
+            if (!ModuleData.Connected)
                 return;
 
-            List<KeyValuePair<TransferBuffer, Packet>> buffers = moduleData.SecurityManager.TransferOutgoing();
+            List<KeyValuePair<TransferBuffer, Packet>> buffers = ModuleData.SecurityManager.TransferOutgoing();
             if (buffers != null)
             {
                 foreach (KeyValuePair<TransferBuffer, Packet> buffer in buffers)

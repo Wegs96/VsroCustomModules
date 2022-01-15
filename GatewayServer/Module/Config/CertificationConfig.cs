@@ -1,4 +1,4 @@
-﻿namespace GatewayServer
+﻿namespace GatewayServer.Module.Config
 {
     public class CertificationConfig
     {
