@@ -13,8 +13,6 @@ This project is targeting .net framework 4.5
 
 Coding style of this project might be a peace of shit , u can always upgrade it
 
-as far as i remember only update part was missing
-
 Last but latest i'm always up for any question but if u can't build/run this project on your own don't ask me how to.
 
 # LICENSE
